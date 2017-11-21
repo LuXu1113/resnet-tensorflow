@@ -45,7 +45,7 @@ Written for learning Resnet and tensorflow. Based on python-3.6 and tensorflow-1
 
 ### Specification
 
-Resnet20 is now using the bottleneck structure, not the structure in the [paper](http://arxiv.org/abs/1512.03385), which will be corrected in the future.
+Resnet20 is now using the bottleneck structure, not the structure in the [paper](http://arxiv.org/abs/1512.03385), this will be corrected in the future.
 
 ---
 
