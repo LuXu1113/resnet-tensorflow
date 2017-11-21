@@ -21,8 +21,9 @@ Written for learning Resnet and tensorflow. Based on python-3.6 and tensorflow-1
 
 ### Reference
 
-1. [deep-residual-networs](https://github.com/KaimingHe/deep-residual-networks)
-2. [tensorflow-api-docs](http://www.tensorfly.cn/tfdoc/api_docs/index.html)
+1. [Deep Residual Learning for Image Recognition](http://arxiv.org/abs/1512.03385)
+2. [deep-residual-networs](https://github.com/KaimingHe/deep-residual-networks)
+3. [tensorflow-api-docs](http://www.tensorfly.cn/tfdoc/api_docs/index.html)
 
 ---
 
@@ -44,7 +45,7 @@ Written for learning Resnet and tensorflow. Based on python-3.6 and tensorflow-1
 
 ### Specification
 
-Resnet20 is now using the bottleneck structure, not the structure of the paper, which will be corrected in the future.
+Resnet20 is now using the bottleneck structure, not the structure in the [paper](http://arxiv.org/abs/1512.03385), which will be corrected in the future.
 
 ---
 
