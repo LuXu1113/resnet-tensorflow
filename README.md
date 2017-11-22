@@ -47,5 +47,5 @@ Written for learning Resnet and tensorflow. Based on python-3.6 and tensorflow-1
 ### Models
 
 * Visualizations of network structures (draw by tensorboard)
-    - [resnet-20](https://github.com/LuXu1113/resnet-tensorflow/models/cifar10_resnet20.png)
+    - [resnet-20](https://github.com/LuXu1113/resnet-tensorflow/blob/master/model/cifar10_resnet20.png)
 
