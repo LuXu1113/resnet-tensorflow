@@ -1,6 +1,7 @@
 # encoding: utf-8
 # python-version: 3.6
 
+import os
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 
@@ -38,14 +39,26 @@ class ResNet :
         labels          = tf.cast(self.labels, tf.int64)
         self.loss       = tf.losses.sparse_softmax_cross_entropy(labels, logits)
         self.total_loss = tf.losses.get_total_loss()
-        self.train      = tf.train.MomentumOptimizer(0.1, 0.9).minimize(self.total_loss)
+
+        global_step     = tf.Variable(0, trainable=False)
+        init_lr         = 0.1
+        learning_rate   = tf.train.exponential_decay(init_lr, global_step, 100, 0.96, staircase = True)
+
+        self.train      = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(self.total_loss, global_step = global_step)
 
         is_correct      = tf.equal(self.predict, labels)
-        self.accuracy   = tf.reduce_mean(tf.cast(is_correct, "float"))
+        self.accuracy   = tf.reduce_mean(tf.cast(is_correct, "float"), name = "accuracy")
 
         self.init = tf.global_variables_initializer()
 
-    def residual_stack(self, x, internel_channels, out_channels, first_stride, n_stacks, is_training, name_prefix) :
+        self.create_summary()
+
+    def create_summary(self) :
+        tf.summary.scalar(name = "loss", tensor = self.loss)
+        tf.summary.scalar(name = "total_loss", tensor = self.total_loss)
+        tf.summary.scalar(name = "accuracy", tensor = self.accuracy)
+
+    def residual_stack(self, x, internel_channels, out_channels, first_stride, n_stacks, use_bottleneck, is_training, name_prefix) :
         for i in range(97, 97 + n_stacks) :
             # branch1    
             short_cut = x
@@ -53,67 +66,98 @@ class ResNet :
 
             if i == 97 :
                 strides = (first_stride, first_stride)
-                short_cut = tf.layers.conv2d(inputs      = short_cut,
-                                             filters     = out_channels,
-                                             kernel_size = 1,
-                                             strides     = strides,
-                                             padding     = "same",
-                                             data_format = "channels_last",
-                                             kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                                             kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                                             name        = name_prefix + chr(i) + "_conv_branch1a")
+                short_cut = tf.layers.conv2d(inputs                = short_cut,
+                                             filters               = out_channels,
+                                             kernel_size           = 1,
+                                             strides               = strides,
+                                             padding               = "same",
+                                             data_format           = "channels_last",
+                                             kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.0005),
+                                             name                  = name_prefix + chr(i) + "_conv_branch1a")
                 short_cut = tf.layers.batch_normalization(inputs   = short_cut,
                                                           axis     = -1,
                                                           training = is_training,
                                                           name     = name_prefix + chr(i) + "_bn_branch1a")
 
             # branch2
-            x = tf.layers.conv2d(inputs      = x,
-                                 filters     = internel_channels,
-                                 kernel_size = 1,
-                                 strides     = strides,
-                                 padding     = "same",
-                                 data_format = "channels_last",
-                                 kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                                 kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                                 name        = name_prefix + chr(i) + "_conv_branch2a")
-            x = tf.layers.batch_normalization(inputs   = x,
-                                              axis     = -1,
-                                              training = is_training,
-                                              name     = name_prefix + chr(i) + "_bn_branch2a")
-            x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2a")
+            if use_bottleneck :
+                x = tf.layers.conv2d(inputs                = x,
+                                     filters               = internel_channels,
+                                     kernel_size           = 1,
+                                     strides               = strides,
+                                     padding               = "same",
+                                     data_format           = "channels_last",
+                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.0005),
+                                     name                  = name_prefix + chr(i) + "_conv_branch2a")
+                x = tf.layers.batch_normalization(inputs   = x,
+                                                  axis     = -1,
+                                                  training = is_training,
+                                                  name     = name_prefix + chr(i) + "_bn_branch2a")
+                x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2a")
 
-            x = tf.layers.conv2d(inputs      = x,
-                                 filters     = internel_channels,
-                                 kernel_size = 3,
-                                 strides     = (1, 1),
-                                 padding     = "same",
-                                 data_format = "channels_last",
-                                 kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                                 kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                                 name        = name_prefix + chr(i) + "conv_branch2b")
-            x = tf.layers.batch_normalization(inputs   = x,
-                                              axis     = -1,
-                                              training = is_training,
-                                              name     = name_prefix + chr(i) + "_bn_branch2b")
-            x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2b")
+                x = tf.layers.conv2d(inputs                = x,
+                                     filters               = internel_channels,
+                                     kernel_size           = 3,
+                                     strides               = (1, 1),
+                                     padding               = "same",
+                                     data_format           = "channels_last",
+                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.0005),
+                                     name                  = name_prefix + chr(i) + "_conv_branch2b")
+                x = tf.layers.batch_normalization(inputs   = x,
+                                                  axis     = -1,
+                                                  training = is_training,
+                                                  name     = name_prefix + chr(i) + "_bn_branch2b")
+                x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2b")
 
-            x = tf.layers.conv2d(inputs      = x,
-                                 filters     = out_channels,
-                                 kernel_size = 1,
-                                 strides     = (1, 1),
-                                 padding     = "same",
-                                 data_format = "channels_last",
-                                 kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                                 kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                                 name        = name_prefix + chr(i) + "conv_branch2c")
-            x = tf.layers.batch_normalization(inputs   = x,
-                                              axis     = -1,
-                                              training = is_training,
-                                              name     = name_prefix + chr(i) + "_bn_branch2c")
+                x = tf.layers.conv2d(inputs                = x,
+                                     filters               = out_channels,
+                                     kernel_size           = 1,
+                                     strides               = (1, 1),
+                                     padding               = "same",
+                                     data_format           = "channels_last",
+                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.0005),
+                                     name                  = name_prefix + chr(i) + "_conv_branch2c")
+                x = tf.layers.batch_normalization(inputs   = x,
+                                                  axis     = -1,
+                                                  training = is_training,
+                                                  name     = name_prefix + chr(i) + "_bn_branch2c")
+            else :
+                x = tf.layers.conv2d(inputs                = x,
+                                     filters               = internel_channels,
+                                     kernel_size           = 3,
+                                     strides               = strides,
+                                     padding               = "same",
+                                     data_format           = "channels_last",
+                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.0005),
+                                     name                  = name_prefix + chr(i) + "_conv_branch2a")
+                x = tf.layers.batch_normalization(inputs   = x,
+                                                  axis     = -1,
+                                                  training = is_training,
+                                                  name     = name_prefix + chr(i) + "_bn_branch2a")
+                x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2a")
+
+                x = tf.layers.conv2d(inputs                = x,
+                                     filters               = out_channels,
+                                     kernel_size           = 3,
+                                     strides               = (1, 1),
+                                     padding               = "same",
+                                     data_format           = "channels_last",
+                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.0005),
+                                     name                  = name_prefix + chr(i) + "_conv_branch2b")
+                x = tf.layers.batch_normalization(inputs   = x,
+                                                  axis     = -1,
+                                                  training = is_training,
+                                                  name     = name_prefix + chr(i) + "_bn_branch2b")
 
             # merge branch1 and branch2
-            x = tf.nn.relu(features = short_cut + x, name = name_prefix + chr(i) + "relu")
+            x = tf.add(short_cut, x, name = name_prefix + chr(i) + "_elementwise_add")
+            x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu")
 
         return x
     
@@ -125,27 +169,27 @@ class ResNet :
         x = tf.cast(raw_input, tf.float32)
 
         # 1-st Conv Layer
-        x = tf.layers.conv2d(inputs      = x,
-                             filters     = 64,
-                             kernel_size = 7,
-                             strides     = (2, 2),
-                             padding     = "same",
-                             data_format = "channels_last",
-                             kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                             kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                             name        = "conv1")
+        x = tf.layers.conv2d(inputs                = x,
+                             filters               = 64,
+                             kernel_size           = 7,
+                             strides               = (2, 2),
+                             padding               = "same",
+                             data_format           = "channels_last",
+                             kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.0005),
+                             name                  = "conv1")
         x = tf.layers.batch_normalization(inputs   = x,
                                           axis     = -1,
                                           training = is_training,
                                           name     = "bn_conv1")
         x = tf.nn.relu(features = x, name = "relu_conv1")
 
-        x = tf.layers.max_pooling2d(inputs      = x,
-                                    pool_size   = 3,
-                                    strides     = 2,
-                                    padding     = "same",
-                                    data_format = "channels_last",
-                                    name        = "pool1")
+        x = tf.layers.max_pooling2d(inputs         = x,
+                                    pool_size      = 3,
+                                    strides        = 2,
+                                    padding        = "same",
+                                    data_format    = "channels_last",
+                                    name           = "pool1")
 
         # conv2x
         x = self.residual_stack(x                  = x,
@@ -153,14 +197,17 @@ class ResNet :
                                 out_channels       = 256,
                                 first_stride       = 1,
                                 n_stacks           = 3,
+                                use_bottleneck     = True,
                                 is_training        = is_training,
                                 name_prefix        = "res2")
+        
         # conv3_x
         x = self.residual_stack(x                  = x,
                                 internel_channels  = 128,
                                 out_channels       = 512,
                                 first_stride       = 2,
                                 n_stacks           = 4,
+                                use_bottleneck     = True,
                                 is_training        = is_training,
                                 name_prefix        = "res3")
         # conv4_x
@@ -169,6 +216,7 @@ class ResNet :
                                 out_channels       = 1024,
                                 first_stride       = 2,
                                 n_stacks           = 6,
+                                use_bottleneck     = True,
                                 is_training        = is_training,
                                 name_prefix        = "res4")
         # conv5_x
@@ -177,6 +225,7 @@ class ResNet :
                                 out_channels       = 2048,
                                 first_stride       = 2,
                                 n_stacks           = 3,
+                                use_bottleneck     = True,
                                 is_training        = is_training,
                                 name_prefix        = "res5")
 
@@ -192,8 +241,8 @@ class ResNet :
         x = tf.layers.flatten(x)
         x = tf.layers.dense(inputs = x,
                             units  = 1000,
-                            kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                            kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
+                            kernel_initializer = tf.truncated_normal_initializer(stddev = 0.01),
+                            kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0005),
                             name   = "fc1000")
         return x
 
@@ -211,7 +260,7 @@ class ResNet :
                              padding     = "same",
                              data_format = "channels_last",
                              kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                             kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
+                             kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0005),
                              name        = "conv1")
         x = tf.layers.batch_normalization(inputs   = x,
                                           axis     = -1,
@@ -224,7 +273,8 @@ class ResNet :
                                 internel_channels  = 16,
                                 out_channels       = 16,
                                 first_stride       = 1,
-                                n_stacks           = 2,
+                                n_stacks           = 3,
+                                use_bottleneck     = False,
                                 is_training        = is_training,
                                 name_prefix        = "res2")
 
@@ -233,7 +283,8 @@ class ResNet :
                                 internel_channels  = 32,
                                 out_channels       = 32,
                                 first_stride       = 2,
-                                n_stacks           = 2,
+                                n_stacks           = 3,
+                                use_bottleneck     = False,
                                 is_training        = is_training,
                                 name_prefix        = "res3")
 
@@ -242,7 +293,8 @@ class ResNet :
                                 internel_channels  = 64,
                                 out_channels       = 64,
                                 first_stride       = 2,
-                                n_stacks           = 2,
+                                n_stacks           = 3,
+                                use_bottleneck     = False,
                                 is_training        = is_training,
                                 name_prefix        = "res4")
 
@@ -258,17 +310,15 @@ class ResNet :
         x = tf.layers.flatten(x)
         x = tf.layers.dense(inputs = x,
                             units  = 10,
-                            kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                            kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
+                            kernel_initializer = tf.truncated_normal_initializer(stddev = 0.01),
+                            kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0005),
                             name   = "fc10")
 
         return x
-                            
-                            
 
 if __name__ == "__main__" :
     with tf.variable_scope("Resnet-50") :
-        resnet = ResNet("ImageNet", 50)
+        resnet50 = ResNet("ImageNet", 50)
     with tf.variable_scope("Resnet-20") :
-        resnet = ResNet("CIFAR-10", 20)
+        resnet20 = ResNet("CIFAR-10", 20)
 

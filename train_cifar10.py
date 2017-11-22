@@ -25,11 +25,13 @@ if __name__ == "__main__" :
 
     # 创建 saver 保存训练出的模型
     saver = tf.train.Saver(tf.global_variables())
+    summary_writer = tf.summary.FileWriter(os.path.join(os.path.abspath("./summary")), sess.graph)
+    summary_writer.add_graph(sess.graph)
 
     LOG("Training ...")
     for epoch in range(1, 200) :
         n_examples = len(x_train)
-        batch_size = 50
+        batch_size = 32
         n_batch    = int((n_examples + batch_size - 1) / batch_size)
         loss       = 0.0
 
@@ -38,10 +40,12 @@ if __name__ == "__main__" :
         for batch_no in range(n_batch) :
             x_ = x_train[batch_no * batch_size : (batch_no + 1) * batch_size]
             y_ = y_train[batch_no * batch_size : (batch_no + 1) * batch_size]
-            sess.run(graph.train, feed_dict = {graph.instances : x_, graph.labels: y_, graph.is_training: True})
+            summary, _  = sess.run([tf.summary.merge_all(), graph.train], feed_dict = {graph.instances : x_, graph.labels: y_, graph.is_training: True})
 
             if (batch_no + 1) % 30 == 0 :
                 LOG("%d/%d\tbatches trained." % (batch_no + 1, n_batch))
+                summary_writer.add_summary(summary, (epoch - 1) * n_batch + batch_no)
+
         finish_time = time.time()
         LOG("%d/%d\tbatches trained." % (n_batch, n_batch))
 
@@ -51,18 +55,17 @@ if __name__ == "__main__" :
         sec_per_batch = duration / n_batch
 
         LOG("Testing ...")
-        # Compute loss of the 1-st batch
-        loss = sess.run(graph.loss, feed_dict = {graph.instances : x_train[0 : batch_size], graph.labels: y_train[0 : batch_size], graph.is_training: True})
-
         # Compute accuracy on validate set
         n_batch = int((len(x_validate) + batch_size - 1) / batch_size)
         accuracy = 0.0
         for batch_no in range(n_batch) :
             x_ = x_validate[batch_no * batch_size : (batch_no + 1) * batch_size]
             y_ = y_validate[batch_no * batch_size : (batch_no + 1) * batch_size]
-            accuracy += sess.run(graph.accuracy, feed_dict = {graph.instances: x_, graph.labels: y_, graph.is_training: False}) * len(x_)
+            acc = sess.run(graph.accuracy, feed_dict = {graph.instances: x_, graph.labels: y_, graph.is_training: False})
+            accuracy += acc * len(x_)
+            
         accuracy /= len(x_validate)
-        LOG("epoch-%d: loss = %.2f, accuracy = %.4f%% (%.1f examples/sec; %.3f sec/batch)" % (epoch, loss, accuracy, examples_per_sec, sec_per_batch))
+        LOG("epoch-%d: accuracy = %.4f%% (%.1f examples/sec; %.3f sec/batch)" % (epoch, accuracy * 100, examples_per_sec, sec_per_batch))
 
         if epoch % 13 == 0 :
             saver.save(sess, os.path.join(os.path.abspath("./model"), "resnet20_epoch%d_" % epoch))
