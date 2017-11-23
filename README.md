@@ -28,6 +28,7 @@ Written for learning Resnet and tensorflow. Based on python-3.6 and tensorflow-1
 
 1. tf.losses.sparse_softmax_cross_entropy will not report error when the rank of logits is equal the rank of labels plus 1, we should make sure of this, otherwise training will not work properly.
 1. when using tf.layers.batch_normalization, moving_mean and moving_average will not be update unless we add dependes like this:
+
     update_ops      = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops) :
         self.train  = tf.Optimizer().minimize(loss)
