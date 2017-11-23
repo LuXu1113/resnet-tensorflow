@@ -25,13 +25,16 @@ if __name__ == "__main__" :
 
     # 创建 saver 保存训练出的模型
     saver = tf.train.Saver(tf.global_variables())
+
+    # 创建 summary_writer，保存训练过程中记录下来的 summary，在 tensorboard 中查看
     summary_writer = tf.summary.FileWriter(os.path.join(os.path.abspath("./summary")), sess.graph)
     summary_writer.add_graph(sess.graph)
+    summary_op = tf.summary.merge_all()
 
     LOG("Training ...")
     for epoch in range(1, 200) :
         n_examples = len(x_train)
-        batch_size = 32
+        batch_size = 128
         n_batch    = int((n_examples + batch_size - 1) / batch_size)
         loss       = 0.0
 
@@ -40,14 +43,12 @@ if __name__ == "__main__" :
         for batch_no in range(n_batch) :
             x_ = x_train[batch_no * batch_size : (batch_no + 1) * batch_size]
             y_ = y_train[batch_no * batch_size : (batch_no + 1) * batch_size]
-            summary, _  = sess.run([tf.summary.merge_all(), graph.train], feed_dict = {graph.instances : x_, graph.labels: y_, graph.is_training: True})
+            loss, acc, _  = sess.run([graph.total_loss, graph.accuracy, graph.train], feed_dict = {graph.instances : x_, graph.labels: y_, graph.is_training: True})
 
             if (batch_no + 1) % 30 == 0 :
-                LOG("%d/%d\tbatches trained." % (batch_no + 1, n_batch))
-                summary_writer.add_summary(summary, (epoch - 1) * n_batch + batch_no)
+                LOG("batch[%5d / %5d]: loss = %.2lf, accuracy = %.2lf%%" % (batch_no + 1, n_batch, loss, acc * 100))
 
         finish_time = time.time()
-        LOG("%d/%d\tbatches trained." % (n_batch, n_batch))
 
         # Compute performance
         duration = finish_time - start_time
@@ -70,4 +71,4 @@ if __name__ == "__main__" :
         if epoch % 13 == 0 :
             saver.save(sess, os.path.join(os.path.abspath("./model"), "resnet20_epoch%d_" % epoch))
             
-
+    sess.close()
