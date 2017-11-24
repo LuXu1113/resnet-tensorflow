@@ -1,14 +1,16 @@
 # encoding: utf-8
 # python-version: 3.6
 
-from datetime import datetime
+import os
 import time
+import math
+from datetime import datetime
 import tensorflow as tf
 import resnet
-import os
 
-def LOG(str) :
-    print("%s: %s" % (datetime.now(), str))
+
+def LOG(str, end = "\n") :
+    print("%s: %s" % (datetime.now(), str), end = end)
 
 if __name__ == "__main__" :
     (x_train, y_train), (x_validate, y_validate) = tf.keras.datasets.cifar10.load_data()
@@ -28,7 +30,6 @@ if __name__ == "__main__" :
 
     # 创建 summary_writer，保存训练过程中记录下来的 summary，在 tensorboard 中查看
     summary_writer = tf.summary.FileWriter(os.path.join(os.path.abspath("./summary")), sess.graph)
-    summary_writer.add_graph(sess.graph)
     summary_op = tf.summary.merge_all()
 
     LOG("Training ...")
@@ -39,34 +40,44 @@ if __name__ == "__main__" :
         loss       = 0.0
 
         # Train all batches.
+        train_acc  = 0.0
+        train_loss = 0.0
+        LOG("epoch-%d |" % epoch, end = "")
         start_time = time.time()
         for batch_no in range(n_batch) :
             x_ = x_train[batch_no * batch_size : (batch_no + 1) * batch_size]
             y_ = y_train[batch_no * batch_size : (batch_no + 1) * batch_size]
-            loss, acc, _  = sess.run([graph.total_loss, graph.accuracy, graph.train], feed_dict = {graph.instances : x_, graph.labels: y_, graph.is_training: True})
+            summary, loss, acc, _  = sess.run([summary_op, graph.total_loss, graph.accuracy, graph.train], feed_dict = {graph.instances : x_, graph.labels: y_, graph.is_training: True})
 
-            if (batch_no + 1) % 30 == 0 :
-                LOG("batch[%5d / %5d]: loss = %.2lf, accuracy = %.2lf%%" % (batch_no + 1, n_batch, loss, acc * 100))
-
+            if int(batch_no / (n_batch / 20.0)) < int((batch_no + 1) / (n_batch / 20.0)) :
+                print("=", end = "")
+                
+            summary_writer.add_summary(summary, (epoch - 1) * n_batch + batch_no + 1)
+            train_acc  += len(x_) * acc
+            train_loss += len(x_) * loss
         finish_time = time.time()
+        print("|")
 
-        # Compute performance
+        # Print performance and accurcy
         duration = finish_time - start_time
         examples_per_sec = n_examples / duration
         sec_per_batch = duration / n_batch
+        train_acc  /= len(x_train) / 100.0
+        train_loss /= len(x_train)
+        LOG("[ perf     ]: %.1f examples/sec, %.3f sec/batch" % (examples_per_sec, sec_per_batch))
+        LOG("[ train    ]: accuracy = %.2f%%, loss = %.2lf" % (train_acc, train_loss))
 
-        LOG("Testing ...")
         # Compute accuracy on validate set
         n_batch = int((len(x_validate) + batch_size - 1) / batch_size)
-        accuracy = 0.0
+        validate_acc = 0.0
         for batch_no in range(n_batch) :
             x_ = x_validate[batch_no * batch_size : (batch_no + 1) * batch_size]
             y_ = y_validate[batch_no * batch_size : (batch_no + 1) * batch_size]
             acc = sess.run(graph.accuracy, feed_dict = {graph.instances: x_, graph.labels: y_, graph.is_training: False})
-            accuracy += acc * len(x_)
+            validate_acc += acc * len(x_)
             
-        accuracy /= len(x_validate)
-        LOG("epoch-%d: accuracy = %.4f%% (%.1f examples/sec; %.3f sec/batch)" % (epoch, accuracy * 100, examples_per_sec, sec_per_batch))
+        validate_acc /= len(x_validate) / 100.0
+        LOG("[ validate ]: accuracy = %.2f%%" % validate_acc)
 
         if epoch % 13 == 0 :
             saver.save(sess, os.path.join(os.path.abspath("./model"), "resnet20_epoch%d_" % epoch))

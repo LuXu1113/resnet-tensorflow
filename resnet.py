@@ -63,8 +63,8 @@ class ResNet :
         self.create_summary()
 
     def create_summary(self) :
-        tf.summary.scalar(name = "loss",     tensor = self.loss)
-        tf.summary.scalar(name = "accuracy", tensor = self.accuracy)
+        tf.summary.scalar(name = "loss", tensor = self.loss)
+        tf.summary.scalar(name = "accuracy_rating", tensor = self.accuracy)
 
     def residual_stack(self, x, internel_channels, out_channels, first_stride, n_blocks, use_bottleneck, is_training, name_prefix) :
         for i in range(97, 97 + n_blocks) :
