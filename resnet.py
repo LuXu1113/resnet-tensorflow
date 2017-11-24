@@ -11,7 +11,7 @@ class ResNet :
 
         self.instances = None
         self.labels    = None
-        logits = None
+        logits         = None
 
         if data_set == "CIFAR-10" :
             self.instances = tf.placeholder(tf.uint8, [None, 32, 32, 3], name = "instances")
@@ -250,11 +250,11 @@ class ResNet :
 
         # FC Layer
         x = tf.layers.flatten(x)
-        x = tf.layers.dense(inputs = x,
-                            units  = 1000,
+        x = tf.layers.dense(inputs             = x,
+                            units              = 1000,
                             kernel_initializer = tf.truncated_normal_initializer(stddev = 0.01),
                             kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                            name   = "fc1000")
+                            name               = "fc1000")
         return x
 
     def build_resnet_cifar(self, raw_input, is_training, n_blocks) :
@@ -264,15 +264,15 @@ class ResNet :
         x = tf.cast(raw_input, tf.float32)
 
         # 1-st Conv Layer
-        x = tf.layers.conv2d(inputs      = x,
-                             filters     = 16,
-                             kernel_size = 3,
-                             strides     = (1, 1),
-                             padding     = "same",
-                             data_format = "channels_last",
-                             kernel_initializer = tf.truncated_normal_initializer(stddev = 0.1),
-                             kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                             name        = "conv1")
+        x = tf.layers.conv2d(inputs                = x,
+                             filters               = 16,
+                             kernel_size           = 3,
+                             strides               = (1, 1),
+                             padding               = "same",
+                             data_format           = "channels_last",
+                             kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                             name                  = "conv1")
         x = tf.layers.batch_normalization(inputs   = x,
                                           axis     = -1,
                                           training = is_training,
@@ -319,11 +319,11 @@ class ResNet :
 
         # FC Layer
         x = tf.layers.flatten(x)
-        x = tf.layers.dense(inputs = x,
-                            units  = 10,
+        x = tf.layers.dense(inputs             = x,
+                            units              = 10,
                             kernel_initializer = tf.truncated_normal_initializer(stddev = 0.01),
                             kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                            name   = "fc10")
+                            name               = "fc10")
 
         return x
 
