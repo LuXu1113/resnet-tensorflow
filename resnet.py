@@ -5,6 +5,10 @@ import os
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 
+BN_MOMENTUM       = 0.9997
+CONV_WEIGHT_DECAY = 0.0005
+FC_WEIGHT_DECAY   = 0.0005
+
 class ResNet :
     def __init__(self, data_set, depth) :
         self.is_training = tf.placeholder(tf.bool, [], name = "is_training")
@@ -41,19 +45,21 @@ class ResNet :
             return
 
         self.inference  = tf.nn.softmax(logits, name = "softmax")
-        self.predict    = tf.argmax(self.inference, 1)
+        self.predict    = tf.argmax(self.inference, axis = 1, name = "predict")
 
         labels          = tf.reshape(tf.cast(self.labels, tf.int64), [-1])
         self.loss       = tf.losses.sparse_softmax_cross_entropy(labels, logits)
         self.total_loss = tf.losses.get_total_loss()
 
-        global_step     = tf.Variable(0, trainable=False)
+        self.step       = tf.Variable(0, trainable = False)
         init_lr         = 0.1
-        learning_rate   = tf.train.exponential_decay(init_lr, global_step, 1000, 0.96, staircase = True)
+        final_lr        = 0.0009
+        decay_steps     = 100000
+        self.lr         = tf.train.polynomial_decay(init_lr, self.step, decay_steps, final_lr, power = 0.5)
 
         update_ops      = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops) :
-            self.train  = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(self.total_loss, global_step = global_step)
+            self.train  = tf.train.MomentumOptimizer(self.lr, 0.9).minimize(self.total_loss, global_step = self.step)
 
         is_correct      = tf.equal(self.predict, labels)
         self.accuracy   = tf.reduce_mean(tf.cast(is_correct, "float"), name = "accuracy")
@@ -65,17 +71,18 @@ class ResNet :
     def create_summary(self) :
         tf.summary.scalar(name = "loss", tensor = self.loss)
         tf.summary.scalar(name = "accuracy_rating", tensor = self.accuracy)
+        tf.summary.scalar(name = "learning_rate", tensor = self.lr)
 
-    def residual_stack(self, x, internel_channels, out_channels, first_stride, n_blocks, use_bottleneck, is_training, name_prefix) :
+    def residual_stack(self, x, in_channels, internel_channels, out_channels, first_stride, n_blocks, use_bottleneck, is_training, name_prefix) :
         for i in range(97, 97 + n_blocks) :
             if i > 122 :
                 i -= 58
 
-            # branch1    
+            # branch1 projection
             short_cut = x
             strides   = (1, 1)
 
-            if i == 97 :
+            if in_channels != out_channels :
                 strides = (first_stride, first_stride)
                 short_cut = tf.layers.conv2d(inputs                = short_cut,
                                              filters               = out_channels,
@@ -84,10 +91,11 @@ class ResNet :
                                              padding               = "same",
                                              data_format           = "channels_last",
                                              kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                              name                  = name_prefix + chr(i) + "_conv_branch1a")
                 short_cut = tf.layers.batch_normalization(inputs   = short_cut,
                                                           axis     = -1,
+                                                          momentum = BN_MOMENTUM,
                                                           training = is_training,
                                                           name     = name_prefix + chr(i) + "_bn_branch1a")
 
@@ -100,10 +108,11 @@ class ResNet :
                                      padding               = "same",
                                      data_format           = "channels_last",
                                      kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2a")
                 x = tf.layers.batch_normalization(inputs   = x,
                                                   axis     = -1,
+                                                  momentum = BN_MOMENTUM,
                                                   training = is_training,
                                                   name     = name_prefix + chr(i) + "_bn_branch2a")
                 x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2a")
@@ -115,10 +124,11 @@ class ResNet :
                                      padding               = "same",
                                      data_format           = "channels_last",
                                      kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2b")
                 x = tf.layers.batch_normalization(inputs   = x,
                                                   axis     = -1,
+                                                  momentum = BN_MOMENTUM,
                                                   training = is_training,
                                                   name     = name_prefix + chr(i) + "_bn_branch2b")
                 x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2b")
@@ -130,10 +140,11 @@ class ResNet :
                                      padding               = "same",
                                      data_format           = "channels_last",
                                      kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2c")
                 x = tf.layers.batch_normalization(inputs   = x,
                                                   axis     = -1,
+                                                  momentum = BN_MOMENTUM,
                                                   training = is_training,
                                                   name     = name_prefix + chr(i) + "_bn_branch2c")
             else :
@@ -144,10 +155,11 @@ class ResNet :
                                      padding               = "same",
                                      data_format           = "channels_last",
                                      kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2a")
                 x = tf.layers.batch_normalization(inputs   = x,
                                                   axis     = -1,
+                                                  momentum = BN_MOMENTUM,
                                                   training = is_training,
                                                   name     = name_prefix + chr(i) + "_bn_branch2a")
                 x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu_branch2a")
@@ -159,16 +171,20 @@ class ResNet :
                                      padding               = "same",
                                      data_format           = "channels_last",
                                      kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                                     kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2b")
                 x = tf.layers.batch_normalization(inputs   = x,
                                                   axis     = -1,
+                                                  momentum = BN_MOMENTUM,
                                                   training = is_training,
                                                   name     = name_prefix + chr(i) + "_bn_branch2b")
 
             # merge branch1 and branch2
             x = tf.add(short_cut, x, name = name_prefix + chr(i) + "_elementwise_add")
             x = tf.nn.relu(features = x, name = name_prefix + chr(i) + "_relu")
+
+            # new in_channels is equal to out_channels in next loop
+            in_channels = out_channels
 
         return x
     
@@ -187,10 +203,11 @@ class ResNet :
                              padding               = "same",
                              data_format           = "channels_last",
                              kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                              name                  = "conv1")
         x = tf.layers.batch_normalization(inputs   = x,
                                           axis     = -1,
+                                          momentum = BN_MOMENTUM,
                                           training = is_training,
                                           name     = "bn_conv1")
         x = tf.nn.relu(features = x, name = "relu_conv1")
@@ -204,6 +221,7 @@ class ResNet :
 
         # conv2x
         x = self.residual_stack(x                  = x,
+                                in_channels        = 64,
                                 internel_channels  = 64,
                                 out_channels       = 256,
                                 first_stride       = 1,
@@ -214,6 +232,7 @@ class ResNet :
         
         # conv3_x
         x = self.residual_stack(x                  = x,
+                                in_channels        = 256,
                                 internel_channels  = 128,
                                 out_channels       = 512,
                                 first_stride       = 2,
@@ -223,6 +242,7 @@ class ResNet :
                                 name_prefix        = "res3")
         # conv4_x
         x = self.residual_stack(x                  = x,
+                                in_channels        = 512,
                                 internel_channels  = 256,
                                 out_channels       = 1024,
                                 first_stride       = 2,
@@ -232,6 +252,7 @@ class ResNet :
                                 name_prefix        = "res4")
         # conv5_x
         x = self.residual_stack(x                  = x,
+                                in_channels        = 1024,
                                 internel_channels  = 512,
                                 out_channels       = 2048,
                                 first_stride       = 2,
@@ -241,20 +262,14 @@ class ResNet :
                                 name_prefix        = "res5")
 
         # global average pooling
-        x = tf.layers.average_pooling2d(inputs      = x,
-                                        pool_size   = 7,
-                                        strides     = 1,
-                                        padding     = "valid",
-                                        data_format = "channels_last",
-                                        name        = "pool5")
+        x = tf.reduce_mean(input_tensor = x, axis = [1, 2], name = "pool5")
 
         # FC Layer
-        x = tf.layers.flatten(x)
-        x = tf.layers.dense(inputs             = x,
-                            units              = 1000,
-                            kernel_initializer = tf.truncated_normal_initializer(stddev = 0.01),
-                            kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                            name               = "fc1000")
+        x = tf.layers.dense(inputs                 = x,
+                            units                  = 1000,
+                            kernel_initializer     = tf.truncated_normal_initializer(stddev = 0.01),
+                            kernel_regularizer     = tf.contrib.layers.l2_regularizer(FC_WEIGHT_DECAY),
+                            name                   = "fc1000")
         return x
 
     def build_resnet_cifar(self, raw_input, is_training, n_blocks) :
@@ -271,16 +286,18 @@ class ResNet :
                              padding               = "same",
                              data_format           = "channels_last",
                              kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
-                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(0.00005),
+                             kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                              name                  = "conv1")
         x = tf.layers.batch_normalization(inputs   = x,
                                           axis     = -1,
+                                          momentum = BN_MOMENTUM,
                                           training = is_training,
                                           name     = "bn_conv1")
         x = tf.nn.relu(features = x, name = "relu_conv1")
 
         # conv2x
         x = self.residual_stack(x                  = x,
+                                in_channels        = 16,
                                 internel_channels  = 16,
                                 out_channels       = 16,
                                 first_stride       = 1,
@@ -291,6 +308,7 @@ class ResNet :
 
         # conv3_x
         x = self.residual_stack(x                  = x,
+                                in_channels        = 16,
                                 internel_channels  = 32,
                                 out_channels       = 32,
                                 first_stride       = 2,
@@ -301,6 +319,7 @@ class ResNet :
 
         # conv4_x
         x = self.residual_stack(x                  = x,
+                                in_channels        = 32,
                                 internel_channels  = 64,
                                 out_channels       = 64,
                                 first_stride       = 2,
@@ -310,20 +329,14 @@ class ResNet :
                                 name_prefix        = "res4")
 
         # Global average pooling
-        x = tf.layers.average_pooling2d(inputs      = x,
-                                        pool_size   = 8,
-                                        strides     = 1,
-                                        padding     = "valid",
-                                        data_format = "channels_last",
-                                        name        = "pool5")
+        x = tf.reduce_mean(input_tensor = x, axis = [1, 2], name = "pool5")
 
         # FC Layer
-        x = tf.layers.flatten(x)
-        x = tf.layers.dense(inputs             = x,
-                            units              = 10,
-                            kernel_initializer = tf.truncated_normal_initializer(stddev = 0.01),
-                            kernel_regularizer = tf.contrib.layers.l2_regularizer(0.00005),
-                            name               = "fc10")
+        x = tf.layers.dense(inputs                 = x,
+                            units                  = 10,
+                            kernel_initializer     = tf.truncated_normal_initializer(stddev = 0.01),
+                            kernel_regularizer     = tf.contrib.layers.l2_regularizer(FC_WEIGHT_DECAY),
+                            name                   = "fc10")
 
         return x
 
