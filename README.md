@@ -40,13 +40,13 @@ Written for learning Resnet and tensorflow. Based on python-3.6 and tensorflow-1
 ### Results
 
 * Train Resnet-20 on CIFAR:
-    - [resnet-20 (CIFAR)](https://github.com/LuXu1113/resnet-tensorflow/blob/master/models/cifar10_resnet20_train.png)
+![resnet-20 (CIFAR)](https://github.com/LuXu1113/resnet-tensorflow/blob/master/models/cifar10_resnet20_train.png)
 
 ### Models
 
 * Visualizations of network structures (draw by tensorboard)
     - [resnet-20 (CIFAR)](https://github.com/LuXu1113/resnet-tensorflow/blob/master/models/cifar10_resnet20.png)
-    - [resnet-56 (CIFAR)]()
+    - [resnet-56 (CIFAR)](https://github.com/LuXu1113/resnet-tensorflow/blob/master/models/cifar10_resnet56.png)
     - [resnet-110 (CIFAR)]()
     - [resnet-18 (ImageNet)]()
     - [resnet-50 (ImageNet)]()
