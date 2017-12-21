@@ -10,61 +10,80 @@ CONV_WEIGHT_DECAY = 0.0005
 FC_WEIGHT_DECAY   = 0.0005
 
 class ResNet :
-    def __init__(self, data_set, depth) :
-        self.is_training = tf.placeholder(tf.bool, [], name = "is_training")
+    def __init__(self, data_set = None, depth = None, model = None) :
+        if not (model == None):
+            sess = tf.Session()
 
-        self.instances = None
-        self.labels    = None
-        logits         = None
+            saver = tf.train.import_meta_graph(model + ".meta")
+            saver.restore(sess, model)
+            graph = tf.get_default_graph()
 
-        if data_set == "CIFAR-10" :
-            self.instances = tf.placeholder(tf.uint8, [None, 32, 32, 3], name = "instances")
-            self.labels    = tf.placeholder(tf.uint8, [None, 1], name = "labels")
+            self.is_training = graph.get_tensor_by_name("is_training:0")
+            self.instances   = graph.get_tensor_by_name("instances:0")
+            self.labels      = graph.get_tensor_by_name("labels:0")
+            self.inference   = graph.get_tensor_by_name("softmax:0")
+            self.predict     = graph.get_tensor_by_name("predict:0")
+            self.step        = graph.get_tensor_by_name("global_step:0")
+            self.lr          = graph.get_tensor_by_name("learning_rate:0")
+            self.accuracy    = graph.get_tensor_by_name("accuracy:0")
+            self.loss        = tf.get_collection("softmax_loss:0")
+            self.total_loss  = tf.get_collection("total_loss:0")
+            self.train       = tf.get_collection("train_op:0")
 
-            if depth == 20 :
-                logits = self.build_resnet_cifar(self.instances, self.is_training, 3)
-            if depth == 56 :
-                logits = self.build_resnet_cifar(self.instances, self.is_training, 9)
-            if depth == 110 :
-                logits = self.build_resnet_cifar(self.instances, self.is_training, 18)
+        else :
+            self.is_training = tf.placeholder(tf.bool, [], name = "is_training")
+            self.instances = None
+            self.labels    = None
+            logits         = None
 
-        elif data_set == "ImageNet" :
-            self.instances = tf.placeholder(tf.uint8, [None, 224, 224, 3], name = "instances")
-            self.labels    = tf.placeholder(tf.uint8, [None, 1], name = "labels")
+            if data_set == "CIFAR-10" :
+                self.instances = tf.placeholder(tf.uint8, [None, 32, 32, 3], name = "instances")
+                self.labels    = tf.placeholder(tf.uint8, [None, 1], name = "labels")
 
-            if depth == 18 :
-                logits = self.build_resnet_imagenet(self.instances, self.is_training, [2, 2, 2, 2])
-            if depth == 50 :
-                logits = self.build_resnet_imagenet(self.instances, self.is_training, [3, 4, 6, 3])
-            if depth == 152 :
-                logits = self.build_resnet_imagenet(self.instances, self.is_training, [3, 8, 36, 3])
-               
+                if depth == 20 :
+                    logits = self.build_resnet_cifar(self.instances, self.is_training, 3)
+                if depth == 56 :
+                    logits = self.build_resnet_cifar(self.instances, self.is_training, 9)
+                if depth == 110 :
+                    logits = self.build_resnet_cifar(self.instances, self.is_training, 18)
+            elif data_set == "ImageNet" :
+                self.instances = tf.placeholder(tf.uint8, [None, 224, 224, 3], name = "instances")
+                self.labels    = tf.placeholder(tf.uint8, [None, 1], name = "labels")
 
-        if None == logits:
-            print("Resnet%d for dataset %s is not supported." % (depth, data_set))
-            return
+                if depth == 18 :
+                    logits = self.build_resnet_imagenet(self.instances, self.is_training, [2, 2, 2, 2])
+                if depth == 50 :
+                    logits = self.build_resnet_imagenet(self.instances, self.is_training, [3, 4, 6, 3])
+                if depth == 152 :
+                    logits = self.build_resnet_imagenet(self.instances, self.is_training, [3, 8, 36, 3])
 
-        self.inference  = tf.nn.softmax(logits, name = "softmax")
-        self.predict    = tf.argmax(self.inference, axis = 1, name = "predict")
+            if None == logits:
+                print("Resnet%d for dataset %s is not supported." % (depth, data_set))
+                return
 
-        labels          = tf.reshape(tf.cast(self.labels, tf.int64), [-1])
-        self.loss       = tf.losses.sparse_softmax_cross_entropy(labels, logits)
-        self.total_loss = tf.losses.get_total_loss()
+            self.inference  = tf.nn.softmax(logits, name = "softmax")
+            self.predict    = tf.argmax(self.inference, axis = 1, name = "predict")
 
-        self.step       = tf.Variable(0, trainable = False)
-        init_lr         = 0.1
-        final_lr        = 0.0009
-        decay_steps     = 100000
-        self.lr         = tf.train.polynomial_decay(init_lr, self.step, decay_steps, final_lr, power = 0.5)
+            self.step       = tf.Variable(0, trainable = False, name = "global_step")
+            init_lr         = 0.1
+            step1_lr        = tf.cond(self.step < 32000, lambda: init_lr, lambda: init_lr / 10.0)
+            self.lr         = tf.cond(self.step < 50000, lambda: step1_lr, lambda: step1_lr / 10.0, name = "learning_rate")
 
-        update_ops      = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        with tf.control_dependencies(update_ops) :
-            self.train  = tf.train.MomentumOptimizer(self.lr, 0.9).minimize(self.total_loss, global_step = self.step)
+            labels          = tf.reshape(tf.cast(self.labels, tf.int64), [-1])
+            self.loss       = tf.losses.sparse_softmax_cross_entropy(labels, logits)
+            self.total_loss = tf.losses.get_total_loss()
 
-        is_correct      = tf.equal(self.predict, labels)
-        self.accuracy   = tf.reduce_mean(tf.cast(is_correct, "float"), name = "accuracy")
+            is_correct      = tf.equal(self.predict, labels)
+            self.accuracy   = tf.reduce_mean(tf.cast(is_correct, "float"), name = "accuracy")
 
-        self.init = tf.global_variables_initializer()
+            update_ops      = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops) :
+                self.train  = tf.train.MomentumOptimizer(self.lr, 0.9).minimize(self.total_loss, global_step = self.step)
+
+            tf.add_to_collection("softmax_loss", self.loss)
+            tf.add_to_collection("total_loss", self.total_loss)
+            tf.add_to_collection("train_op", self.train)
+            self.init = tf.global_variables_initializer()
 
         self.create_summary()
 
@@ -269,7 +288,7 @@ class ResNet :
                             units                  = 1000,
                             kernel_initializer     = tf.truncated_normal_initializer(stddev = 0.01),
                             kernel_regularizer     = tf.contrib.layers.l2_regularizer(FC_WEIGHT_DECAY),
-                            name                   = "fc1000")
+                            name                   = "logits")
         return x
 
     def build_resnet_cifar(self, raw_input, is_training, n_blocks) :
@@ -336,7 +355,7 @@ class ResNet :
                             units                  = 10,
                             kernel_initializer     = tf.truncated_normal_initializer(stddev = 0.01),
                             kernel_regularizer     = tf.contrib.layers.l2_regularizer(FC_WEIGHT_DECAY),
-                            name                   = "fc10")
+                            name                   = "logits")
 
         return x
 

@@ -43,7 +43,7 @@ if __name__ == "__main__" :
 
     LOG("Training ...")
     itr = 0
-    for epoch in range(1, 250) :
+    for epoch in range(1, 260) :
         n_examples = len(x_train)
         batch_size = 128
         n_batch    = int((n_examples + batch_size - 1) / batch_size)
