@@ -28,14 +28,7 @@ if __name__ == "__main__" :
 
     # 构建计算流图
     LOG("Building graph ...")
-    # saver = tf.train.import_meta_graph(os.path.abspath("./model/model-55913.meta"))
-    # saver.restore(sess, os.path.abspath("./model/model-55913"))
-    # graph = tf.get_default_graph()
-
-    # instance    = graph.get_tensor_by_name("instances:0")
-    # is_training = graph.get_tensor_by_name("is_training:0")
-    # predict     = graph.get_tensor_by_name("predict:0")
-    graph = resnet.ResNet(model = os.path.abspath("./model/model-55913"))
+    graph = resnet.ResNet(sess = sess, model = os.path.abspath("./model/model-96577"))
 
     # Compute accuracy on validate set
     x_ = [None]

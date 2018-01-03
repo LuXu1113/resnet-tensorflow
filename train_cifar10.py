@@ -42,7 +42,6 @@ if __name__ == "__main__" :
     summary_op = tf.summary.merge_all()
 
     LOG("Training ...")
-    itr = 0
     for epoch in range(1, 260) :
         n_examples = len(x_train)
         batch_size = 128
