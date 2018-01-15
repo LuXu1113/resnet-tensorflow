@@ -5,12 +5,15 @@ import os
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 
-BN_MOMENTUM       = 0.9997
-CONV_WEIGHT_DECAY = 0.0005
-FC_WEIGHT_DECAY   = 0.0005
+BN_MOMENTUM       = 0.99
+CONV_WEIGHT_DECAY = 0.001
+FC_WEIGHT_DECAY   = 0.001
 
 class ResNet :
     def __init__(self, data_set = None, depth = None, sess = None, model = None) :
+        # self.initializer = tf.truncated_normal_initializer(stddev = 0.1)
+        self.initializer = tf.orthogonal_initializer()
+
         if not (model == None):
             saver = tf.train.import_meta_graph(model + ".meta")
             saver.restore(sess, model)
@@ -66,11 +69,11 @@ class ResNet :
             self.step       = tf.Variable(0, trainable = False, name = "global_step")
             init_lr         = 0.1
             step1_lr        = tf.cond(self.step < 32000, lambda: init_lr, lambda: init_lr / 10.0)
-            self.lr         = tf.cond(self.step < 60000, lambda: step1_lr, lambda: step1_lr / 10.0, name = "learning_rate")
+            self.lr         = tf.cond(self.step < 49000, lambda: step1_lr, lambda: step1_lr / 10.0, name = "learning_rate")
 
             labels          = tf.reshape(tf.cast(self.labels, tf.int64), [-1])
-            # self.loss       = tf.losses.sparse_softmax_cross_entropy(labels, logits)
-            self.loss       = self.focal_loss(labels, self.inference)
+            self.loss       = tf.losses.sparse_softmax_cross_entropy(labels, logits)
+            # self.loss       = self.focal_loss(labels, self.inference, alpha = 1.5)
             self.total_loss = tf.losses.get_total_loss()
 
             is_correct      = tf.equal(self.predict, labels)
@@ -120,7 +123,7 @@ class ResNet :
                                              strides               = strides,
                                              padding               = "same",
                                              data_format           = "channels_last",
-                                             kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                             kernel_initializer    = self.initializer,
                                              kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                              name                  = name_prefix + chr(i) + "_conv_branch1a")
                 short_cut = tf.layers.batch_normalization(inputs   = short_cut,
@@ -137,7 +140,7 @@ class ResNet :
                                      strides               = strides,
                                      padding               = "same",
                                      data_format           = "channels_last",
-                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_initializer    = self.initializer,
                                      kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2a")
                 x = tf.layers.batch_normalization(inputs   = x,
@@ -153,7 +156,7 @@ class ResNet :
                                      strides               = (1, 1),
                                      padding               = "same",
                                      data_format           = "channels_last",
-                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_initializer    = self.initializer,
                                      kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2b")
                 x = tf.layers.batch_normalization(inputs   = x,
@@ -169,7 +172,7 @@ class ResNet :
                                      strides               = (1, 1),
                                      padding               = "same",
                                      data_format           = "channels_last",
-                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_initializer    = self.initializer,
                                      kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2c")
                 x = tf.layers.batch_normalization(inputs   = x,
@@ -184,7 +187,7 @@ class ResNet :
                                      strides               = strides,
                                      padding               = "same",
                                      data_format           = "channels_last",
-                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_initializer    = self.initializer,
                                      kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2a")
                 x = tf.layers.batch_normalization(inputs   = x,
@@ -200,7 +203,7 @@ class ResNet :
                                      strides               = (1, 1),
                                      padding               = "same",
                                      data_format           = "channels_last",
-                                     kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                                     kernel_initializer    = self.initializer,
                                      kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                                      name                  = name_prefix + chr(i) + "_conv_branch2b")
                 x = tf.layers.batch_normalization(inputs   = x,
@@ -232,7 +235,7 @@ class ResNet :
                              strides               = (2, 2),
                              padding               = "same",
                              data_format           = "channels_last",
-                             kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                             kernel_initializer    = self.initializer,
                              kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                              name                  = "conv1")
         x = tf.layers.batch_normalization(inputs   = x,
@@ -296,8 +299,8 @@ class ResNet :
 
         # FC Layer
         x = tf.layers.dense(inputs                 = x,
-                            units                  = 1000,
-                            kernel_initializer     = tf.truncated_normal_initializer(stddev = 0.01),
+                            units                  = self.n_classes,
+                            kernel_initializer     = self.initializer,
                             kernel_regularizer     = tf.contrib.layers.l2_regularizer(FC_WEIGHT_DECAY),
                             name                   = "logits")
         return x
@@ -315,7 +318,7 @@ class ResNet :
                              strides               = (1, 1),
                              padding               = "same",
                              data_format           = "channels_last",
-                             kernel_initializer    = tf.truncated_normal_initializer(stddev = 0.1),
+                             kernel_initializer    = self.initializer,
                              kernel_regularizer    = tf.contrib.layers.l2_regularizer(CONV_WEIGHT_DECAY),
                              name                  = "conv1")
         x = tf.layers.batch_normalization(inputs   = x,
@@ -363,8 +366,8 @@ class ResNet :
 
         # FC Layer
         x = tf.layers.dense(inputs                 = x,
-                            units                  = 10,
-                            kernel_initializer     = tf.truncated_normal_initializer(stddev = 0.01),
+                            units                  = self.n_classes,
+                            kernel_initializer     = self.initializer,
                             kernel_regularizer     = tf.contrib.layers.l2_regularizer(FC_WEIGHT_DECAY),
                             name                   = "logits")
 
