@@ -5,7 +5,7 @@ import os
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 
-BN_MOMENTUM       = 0.99
+BN_MOMENTUM       = 0.999
 CONV_WEIGHT_DECAY = 0.001
 FC_WEIGHT_DECAY   = 0.001
 
